@@ -1,24 +1,38 @@
-# Golf Society Web App
+# Golf Society Backend
 
-A web application for managing golf players, recording scores, and generating leaderboards.
+This is the backend API for managing a golf society, built using FastAPI and SQLite.
 
-## Setup
+## Features
+- Player management
+- Course management
+- Competitions and rounds tracking
+- Score tracking and leaderboards
 
-1. Clone the repository:
-   ```sh
-   git clone <repo-url>
-   cd golf_society
-   ```
-2. Create a virtual environment and activate it:
-   ```sh
-   python -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
-3. Install dependencies:
-   ```sh
-   pip install -r requirements.txt
-   ```
-4. Run the application:
-   ```sh
-   uvicorn main:app --reload
-   ```
+## Installation
+
+### Prerequisites
+Ensure you have **Python 3.8+** installed.
+
+### Clone the Repository
+```sh
+git clone <your-repo-url>
+cd golf_society_backend
+```
+
+### Install Dependencies
+```sh
+pip install -r requirements.txt
+```
+
+### Run the Server
+```sh
+uvicorn backend.main:app --reload
+```
+
+### API Endpoints
+Once running, you can access the **interactive API documentation** at:
+- Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- Redoc: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+
+## License
+This project is licensed under the MIT License.
