@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException, Security
 from fastapi.security.api_key import APIKeyHeader
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Float, JSON
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Float, JSON, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import math
 
@@ -21,6 +22,21 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./golf_society.db")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Grand Prix Scoring System
+GRAND_PRIX_POINTS = [10, 8, 6, 5, 4, 3, 2, 1, 0]
+
+# FastAPI App
+app = FastAPI()
+
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change this to specific frontend origins for security
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Pydantic Models
 class PlayerCreate(BaseModel):
@@ -44,50 +60,6 @@ class ScoreCreate(BaseModel):
     competition_id: int
     hole_by_hole_scores: list[int]
 
-# Database Models
-class Player(Base):
-    __tablename__ = "players"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    handicap = Column(Float, default=0.0)
-
-class Course(Base):
-    __tablename__ = "courses"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    par_values = Column(JSON)
-    stroke_indexes = Column(JSON)
-    hole_yardages = Column(JSON)
-
-class Competition(Base):
-    __tablename__ = "competitions"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    date = Column(String)
-    course_id = Column(Integer, ForeignKey("courses.id"))
-    competition_type = Column(String)
-    course = relationship("Course")
-
-class Score(Base):
-    __tablename__ = "scores"
-    id = Column(Integer, primary_key=True, index=True)
-    player_id = Column(Integer, ForeignKey("players.id"))
-    competition_id = Column(Integer, ForeignKey("competitions.id"))
-    hole_by_hole_scores = Column(JSON)
-    total_score = Column(Integer)
-    stableford_points = Column(Integer, default=0)
-    super_par_points = Column(Integer, default=0)
-    eagles = Column(Integer, default=0)
-    birdies = Column(Integer, default=0)
-    pars = Column(Integer, default=0)
-    bogeys = Column(Integer, default=0)
-    doubles_or_worse = Column(Integer, default=0)
-    twos = Column(Integer, default=0)
-    player = relationship("Player")
-    competition = relationship("Competition")
-
-app = FastAPI()
-
 # Database Dependency
 def get_db():
     db = SessionLocal()
@@ -96,34 +68,21 @@ def get_db():
     finally:
         db.close()
 
-def calculate_points(hole_scores, par_values):
-    stableford_points = 0
-    super_par_points = 0
-    eagles = birdies = pars = bogeys = doubles_or_worse = twos = 0
-    
-    for hole_score, par in zip(hole_scores, par_values):
-        score_diff = hole_score - par
-        if hole_score == 2:
-            twos += 1
-        if score_diff == -2:
-            stableford_points += 4
-            super_par_points += 4
-            eagles += 1
-        elif score_diff == -1:
-            stableford_points += 3
-            super_par_points += 2
-            birdies += 1
-        elif score_diff == 0:
-            stableford_points += 2
-            super_par_points += 1
-            pars += 1
-        elif score_diff == 1:
-            stableford_points += 1
-            bogeys += 1
-        else:
-            doubles_or_worse += 1
-    
-    return stableford_points, super_par_points, eagles, birdies, pars, bogeys, doubles_or_worse, twos
+@app.post("/players/", dependencies=[Depends(validate_api_key)])
+def create_player(player: PlayerCreate, db: Session = Depends(get_db)):
+    db_player = Player(name=player.name, handicap=player.handicap)
+    db.add(db_player)
+    db.commit()
+    db.refresh(db_player)
+    return db_player
+
+@app.post("/courses/", dependencies=[Depends(validate_api_key)])
+def create_course(course: CourseCreate, db: Session = Depends(get_db)):
+    db_course = Course(name=course.name, par_values=course.par_values, stroke_indexes=course.stroke_indexes, hole_yardages=course.hole_yardages)
+    db.add(db_course)
+    db.commit()
+    db.refresh(db_course)
+    return db_course
 
 @app.post("/competitions/", dependencies=[Depends(validate_api_key)])
 def create_competition(competition: CompetitionCreate, db: Session = Depends(get_db)):
@@ -143,8 +102,12 @@ def record_score(score: ScoreCreate, db: Session = Depends(get_db)):
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     
+    player = db.query(Player).filter(Player.id == score.player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    
     total_score = sum(score.hole_by_hole_scores)
-    stableford_points, super_par_points, eagles, birdies, pars, bogeys, doubles_or_worse, twos = calculate_points(score.hole_by_hole_scores, course.par_values)
+    stableford_points, super_par_points, eagles, birdies, pars, bogeys, doubles_or_worse, twos = calculate_points(score.hole_by_hole_scores, course.par_values, course.stroke_indexes, player.handicap)
     
     new_score = Score(
         player_id=score.player_id,
@@ -165,7 +128,4 @@ def record_score(score: ScoreCreate, db: Session = Depends(get_db)):
     db.refresh(new_score)
     
     return new_score
-
-# Create Tables
-Base.metadata.create_all(bind=engine)
 
