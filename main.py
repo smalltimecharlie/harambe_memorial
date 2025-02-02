@@ -89,9 +89,9 @@ def get_twos_leaderboard(db: Session = Depends(get_db)):
 def populate_dummy_data():
     db = SessionLocal()
     db.add_all([
-        Player(name="Alice", handicap=5.2),
-        Player(name="Bob", handicap=10.4),
-        Player(name="Charlie", handicap=15.6)
+        Player(name="Simon Lee", handicap=1.0),
+        Player(name="3dLife", handicap=0.8),
+        Player(name="Charlie", handicap=10.4)
     ])
     db.commit()
     
